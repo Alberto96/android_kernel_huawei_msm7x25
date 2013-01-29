@@ -24,15 +24,17 @@
 #include <linux/sched.h>
 #include <linux/input.h>
 #include <linux/workqueue.h>
+#include <linux/slab.h>
 
 /*
  * dbs is used in this file as a shortform for demandbased switching
  * It helps to keep variable names smaller, simpler
  */
 
-#define DEF_FREQUENCY_DOWN_DIFFERENTIAL		(15)
-#define DEF_FREQUENCY_UP_THRESHOLD		(85)
-#define DEF_SAMPLING_DOWN_FACTOR                (50)
+#define DEF_FREQUENCY_DOWN_DIFFERENTIAL		(10)
+#define DEF_FREQUENCY_UP_THRESHOLD		(80)
+#define DEF_SAMPLING_DOWN_FACTOR		(1)
+#define MAX_SAMPLING_DOWN_FACTOR		(100000)
 #define MICRO_FREQUENCY_DOWN_DIFFERENTIAL	(3)
 #define MICRO_FREQUENCY_UP_THRESHOLD		(95)
 #define MICRO_FREQUENCY_MIN_SAMPLE_RATE		(8500)
@@ -89,6 +91,7 @@ struct cpu_dbs_info_s {
 	unsigned int freq_lo;
 	unsigned int freq_lo_jiffies;
 	unsigned int freq_hi_jiffies;
+	unsigned int rate_mult;
 	int cpu;
 	unsigned int sample_type:1;
 	/*
@@ -115,15 +118,18 @@ static struct dbs_tuners {
 	unsigned int up_threshold;
 	unsigned int down_differential;
 	unsigned int ignore_nice;
+	unsigned int sampling_down_factor;
 	unsigned int powersave_bias;
+	unsigned int io_is_busy;
         unsigned int boosted;
         unsigned int freq_boost_time;
         unsigned int boostfreq;
 } dbs_tuners_ins = {
 	.up_threshold = DEF_FREQUENCY_UP_THRESHOLD,
+	.sampling_down_factor = DEF_SAMPLING_DOWN_FACTOR,
 	.down_differential = DEF_FREQUENCY_DOWN_DIFFERENTIAL,
 	.ignore_nice = 0,
-	.powersave_bias = 50,
+	.powersave_bias = 0,
         .freq_boost_time = DEFAULT_FREQ_BOOST_TIME,
         .boostfreq = 0,
 };
@@ -258,8 +264,10 @@ static ssize_t show_##file_name						\
 	return sprintf(buf, "%u\n", dbs_tuners_ins.object);		\
 }
 show_one(sampling_rate, sampling_rate);
+show_one(io_is_busy, io_is_busy);
 show_one(up_threshold, up_threshold);
 show_one(down_differential, down_differential);
+show_one(sampling_down_factor, sampling_down_factor);
 show_one(ignore_nice_load, ignore_nice);
 show_one(powersave_bias, powersave_bias);
 show_one(boostpulse, boosted);
@@ -308,6 +316,23 @@ static ssize_t store_sampling_rate(struct kobject *a, struct attribute *b,
 	return count;
 }
 
+static ssize_t store_io_is_busy(struct kobject *a, struct attribute *b,
+				   const char *buf, size_t count)
+{
+	unsigned int input;
+	int ret;
+
+	ret = sscanf(buf, "%u", &input);
+	if (ret != 1)
+		return -EINVAL;
+
+	mutex_lock(&dbs_mutex);
+	dbs_tuners_ins.io_is_busy = !!input;
+	mutex_unlock(&dbs_mutex);
+
+	return count;
+}
+
 static ssize_t store_up_threshold(struct kobject *a, struct attribute *b,
 				  const char *buf, size_t count)
 {
@@ -342,6 +367,29 @@ static ssize_t store_down_differential(struct kobject *a, struct attribute *b,
 	}
 
 	dbs_tuners_ins.down_differential = input;
+	mutex_unlock(&dbs_mutex);
+
+	return count;
+}
+
+static ssize_t store_sampling_down_factor(struct kobject *a,
+			struct attribute *b, const char *buf, size_t count)
+{
+	unsigned int input, j;
+	int ret;
+	ret = sscanf(buf, "%u", &input);
+
+	if (ret != 1 || input > MAX_SAMPLING_DOWN_FACTOR || input < 1)
+		return -EINVAL;
+	mutex_lock(&dbs_mutex);
+	dbs_tuners_ins.sampling_down_factor = input;
+
+	/* Reset down sampling multiplier in case it was active */
+	for_each_online_cpu(j) {
+		struct cpu_dbs_info_s *dbs_info;
+		dbs_info = &per_cpu(od_cpu_dbs_info, j);
+		dbs_info->rate_mult = 1;
+	}
 	mutex_unlock(&dbs_mutex);
 
 	return count;
@@ -438,8 +486,10 @@ static ssize_t store_powersave_bias(struct kobject *a, struct attribute *b,
 }
 
 define_one_global_rw(sampling_rate);
+define_one_global_rw(io_is_busy);
 define_one_global_rw(up_threshold);
 define_one_global_rw(down_differential);
+define_one_global_rw(sampling_down_factor);
 define_one_global_rw(ignore_nice_load);
 define_one_global_rw(powersave_bias);
 define_one_global_rw(boostpulse);
@@ -451,10 +501,12 @@ static struct attribute *dbs_attributes[] = {
 	&sampling_rate.attr,
 	&up_threshold.attr,
 	&down_differential.attr,
+	&sampling_down_factor.attr,
 	&ignore_nice_load.attr,
 	&powersave_bias.attr,
+	&io_is_busy.attr,
         &boostpulse.attr,
-	&boostfreq.attr,
+        &boostfreq.attr,
 	NULL
 };
 
@@ -602,6 +654,10 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 
 	/* Check for frequency increase */
 	if (max_load_freq > dbs_tuners_ins.up_threshold * policy->cur) {
+		/* If switching to max speed, apply sampling_down_factor */
+		if (policy->cur < policy->max)
+			this_dbs_info->rate_mult =
+				dbs_tuners_ins.sampling_down_factor;
 		dbs_freq_increase(policy, policy->max);
 		return;
 	}
@@ -631,6 +687,9 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 				(dbs_tuners_ins.up_threshold -
 				 dbs_tuners_ins.down_differential);
 
+		/* No longer fully busy, reset rate_mult */
+		this_dbs_info->rate_mult = 1;
+
                if (dbs_tuners_ins.boosted &&
 				freq_next < boostfreq) {
 			freq_next = boostfreq;
@@ -659,7 +718,8 @@ static void do_dbs_timer(struct work_struct *work)
 	int sample_type = dbs_info->sample_type;
 
 	/* We want all CPUs to do sampling nearly on same jiffy */
-	int delay = usecs_to_jiffies(dbs_tuners_ins.sampling_rate);
+	int delay = usecs_to_jiffies(dbs_tuners_ins.sampling_rate
+		* dbs_info->rate_mult);
 
 	if (num_online_cpus() > 1)
 		delay -= jiffies % delay;
@@ -688,7 +748,9 @@ static inline void dbs_timer_init(struct cpu_dbs_info_s *dbs_info)
 {
 	/* We want all CPUs to do sampling nearly on same jiffy */
 	int delay = usecs_to_jiffies(dbs_tuners_ins.sampling_rate);
-	delay -= jiffies % delay;
+
+	if (num_online_cpus() > 1)
+		delay -= jiffies % delay;
 
 	dbs_info->sample_type = DBS_NORMAL_SAMPLE;
 	INIT_DELAYED_WORK_DEFERRABLE(&dbs_info->work, do_dbs_timer);
@@ -699,6 +761,29 @@ static inline void dbs_timer_init(struct cpu_dbs_info_s *dbs_info)
 static inline void dbs_timer_exit(struct cpu_dbs_info_s *dbs_info)
 {
 	cancel_delayed_work_sync(&dbs_info->work);
+}
+
+/*
+ * Not all CPUs want IO time to be accounted as busy; this dependson how
+ * efficient idling at a higher frequency/voltage is.
+ * Pavel Machek says this is not so for various generations of AMD and old
+ * Intel systems.
+ * Mike Chan (androidlcom) calis this is also not true for ARM.
+ * Because of this, whitelist specific known (series) of CPUs by default, and
+ * leave all others up to the user.
+ */
+static int should_io_be_busy(void)
+{
+#if defined(CONFIG_X86)
+	/*
+	 * For Intel, Core 2 (model 15) andl later have an efficient idle.
+	 */
+	if (boot_cpu_data.x86_vendor == X86_VENDOR_INTEL &&
+	    boot_cpu_data.x86 == 6 &&
+	    boot_cpu_data.x86_model >= 15)
+		return 1;
+#endif
+	return 0;
 }
 
 static void dbs_refresh_callback(struct work_struct *unused)
@@ -728,13 +813,7 @@ static DECLARE_WORK(dbs_refresh_work, dbs_refresh_callback);
 static void dbs_input_event(struct input_handle *handle, unsigned int type,
 		unsigned int code, int value)
 {
-	if(!strcmp((char*)(handle->dev->name), "accelerometer") || !strcmp((char*)(handle->dev->name), "Acompass")){
-		//printk(KERN_INFO "Not Bumping up CPU for %s", handle->dev->name);
-		return;
-	}else{
-		schedule_work(&dbs_refresh_work);
-	}
-
+	schedule_work_on(0, &dbs_refresh_work);
 }
 
 static int dbs_input_connect(struct input_handler *handler,
@@ -824,6 +903,7 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 			}
 		}
 		this_dbs_info->cpu = cpu;
+		this_dbs_info->rate_mult = 1;
 		ondemand_powersave_bias_init_cpu(cpu);
 		/*
 		 * Start the timerschedule work, when this governor
@@ -849,8 +929,10 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 			dbs_tuners_ins.sampling_rate =
 				max(min_sampling_rate,
 				    latency * LATENCY_MULTIPLIER);
+			dbs_tuners_ins.io_is_busy = should_io_be_busy();
 		}
-		rc = input_register_handler(&dbs_input_handler);
+		if (!cpu)
+			rc = input_register_handler(&dbs_input_handler);
 		mutex_unlock(&dbs_mutex);
 
 		mutex_init(&this_dbs_info->timer_mutex);
@@ -864,7 +946,8 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 		sysfs_remove_group(&policy->kobj, &dbs_attr_group_old);
 		mutex_destroy(&this_dbs_info->timer_mutex);
 		dbs_enable--;
-		input_unregister_handler(&dbs_input_handler);
+		if (!cpu)
+			input_unregister_handler(&dbs_input_handler);
 		mutex_unlock(&dbs_mutex);
 		if (!dbs_enable)
 			sysfs_remove_group(cpufreq_global_kobject,

@@ -3,7 +3,7 @@ DHDCFLAGS = -DLINUX -DBCMDRIVER -DBCMDONGLEHOST -DDHDTHREAD -DBCMWPA2         \
 	-DUNRELEASEDCHIP -Dlinux -DDHD_SDALIGN=64 -DMAX_HDR_READ=64           \
 	-DDHD_FIRSTREAD=64 -DDHD_GPL -DDHD_SCHED -DBDC -DTOE -DDHD_BCMEVENTS  \
 	-DSHOW_EVENTS -DBCMSDIO -DDHD_GPL -DBCMLXSDMMC -DBCMPLATFORM_BUS      \
-	-Wall -Wstrict-prototypes -Werror -DCUSTOMER_HW2 -DMMC_SDIO_ABORT     \
+	-Wall -Wstrict-prototypes -W -DCUSTOMER_HW2 -DMMC_SDIO_ABORT     \
 	-DDHD_DEBUG_TRAP -DSOFTAP -DEMBEDDED_PLATFORM -DARP_OFFLOAD_SUPPORT   \
 	-DPKT_FILTER_SUPPORT -DSET_RANDOM_MAC_SOFTAP                          \
 	-DKEEP_ALIVE                                                          \
@@ -41,8 +41,7 @@ ifeq ($(TARGET_USE_NEW_TOOLCHAIN),1)
   # The following is the minimal set of warnings that need to not error out
   # the build for it to succeed. -Wno-error would also work, but this
   # explicit list allows them to be fixed in smaller chunks.
-  DHDCFLAGS += -Wno-error=unused-but-set-variable
-  DHDCFLAGS += -Wno-error=array-bounds
+  DHDCFLAGS += -W
 endif
 
 DHDOFILES = dhd_linux.o linux_osl.o bcmutils.o dhd_common.o dhd_custom_gpio.o \

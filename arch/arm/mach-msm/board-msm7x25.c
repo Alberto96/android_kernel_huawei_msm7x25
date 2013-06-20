@@ -152,9 +152,9 @@ static unsigned int sub_board_id = 0;
 
 /*now crash dump is used for SMEM log to catch sleep log of ARM9 side*/
 #ifdef CONFIG_HUAWEI_CRASH_DUMP
-#define HUAWEI_CRASH_MEM_SIZE   (600*1024) //600K size
+#define HUAWEI_CRASH_MEM_SIZE   (100*1024) //600K size
 #elif defined(CONFIG_HUAWEI_SMEM_SLEEP_LOG)
-#define HUAWEI_SMEM_SLEEP_LOG_SIZE   (600*1024) //600K size
+#define HUAWEI_SMEM_SLEEP_LOG_SIZE   (100*1024) //600K size
 #endif
 #define HUAWEI_SHARE_MEMORY_SIZE (424*1024) //424K
 
@@ -3440,7 +3440,7 @@ static void __init msm7x2x_init(void)
 	/* OEMs may modify the value at their discretion for performance */
 	/* The appropriate maximum replacement for 160000 is: */
 	/* clk_get_max_axi_khz() */
-	kgsl_pdata.high_axi_3d = 160000;
+	kgsl_pdata.high_axi_3d = 240000;
 
 	/* 7x27 doesn't allow graphics clocks to be run asynchronously to */
 	/* the AXI bus */

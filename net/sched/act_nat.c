@@ -263,7 +263,6 @@ static int tcf_nat_dump(struct sk_buff *skb, struct tc_action *a,
 	struct tcf_nat *p = a->priv;
 	struct tc_nat *opt;
 	struct tcf_t t;
-	int s;
 
 	s = sizeof(*opt);
 
@@ -288,13 +287,10 @@ static int tcf_nat_dump(struct sk_buff *skb, struct tc_action *a,
 	t.expires = jiffies_to_clock_t(p->tcf_tm.expires);
 	NLA_PUT(skb, TCA_NAT_TM, sizeof(t), &t);
 
-	kfree(opt);
-
 	return skb->len;
 
 nla_put_failure:
 	nlmsg_trim(skb, b);
-	kfree(opt);
 	return -1;
 }
 

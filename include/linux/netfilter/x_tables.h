@@ -191,6 +191,8 @@ struct xt_counters_info
  */
 struct xt_match_param {
 	const struct net_device *in, *out;
+	const struct xt_match *match;
+	const void *matchinfo; 
 	int fragoff;
 	unsigned int thoff;
 	unsigned int hooknum;

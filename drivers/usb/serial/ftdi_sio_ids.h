@@ -38,6 +38,13 @@
 /* www.candapter.com Ewert Energy Systems CANdapter device */
 #define FTDI_CANDAPTER_PID 0x9F80 /* Product Id */
 
+/*
+ * Texas Instruments XDS100v2 JTAG / BeagleBone A3
+ * http://processors.wiki.ti.com/index.php/XDS100
+ * http://beagleboard.org/bone
+ */
+#define TI_XDS100V2_PID		0xa6d0
+
 #define FTDI_NXTCAM_PID		0xABB8 /* NXTCam for Mindstorms NXT */
 
 /* US Interface Navigator (http://www.usinterface.com/) */
@@ -111,6 +118,7 @@
 
 /* Propox devices */
 #define FTDI_PROPOX_JTAGCABLEII_PID	0xD738
+#define FTDI_PROPOX_ISPCABLEIII_PID	0xD739
 
 /* Lenz LI-USB Computer Interface. */
 #define FTDI_LENZ_LIUSB_PID	0xD780
@@ -521,6 +529,12 @@
 #define ADI_VID 		0x0456
 #define ADI_GNICE_PID 		0xF000
 #define ADI_GNICEPLUS_PID 	0xF001
+
+/*
+ * Hornby Elite
+ */
+#define HORNBY_VID		0x04D8
+#define HORNBY_ELITE_PID	0x000A
 
 /*
  * RATOC REX-USB60F
@@ -1172,3 +1186,9 @@
  */
 /* TagTracer MIFARE*/
 #define FTDI_ZEITCONTROL_TAGTRACE_MIFARE_PID	0xF7C0
+
+/*
+ * Rainforest Automation
+ */
+/* ZigBee controller */
+#define FTDI_RF_R106		0x8A28

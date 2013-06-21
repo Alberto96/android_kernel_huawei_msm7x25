@@ -144,8 +144,6 @@ static int lowmem_shrink(int nr_to_scan, gfp_t gfp_mask)
 		lowmem_print(1, "send sigkill to %d (%s), adj %d, size %d\n",
 			     selected->pid, selected->comm,
 			     selected_oom_adj, selected_tasksize);
-		lowmem_deathpending = selected;
-		lowmem_deathpending_timeout = jiffies + HZ;
 		send_sig(SIGKILL, selected, 0);
 		rem -= selected_tasksize;
 	}

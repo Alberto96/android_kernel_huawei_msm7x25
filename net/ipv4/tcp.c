@@ -2881,6 +2881,7 @@ void __init tcp_init(void)
 	struct sk_buff *skb = NULL;
 	unsigned long nr_pages, limit;
 	int order, i, max_share;
+	unsigned long jiffy = jiffies;
 
 	BUILD_BUG_ON(sizeof(struct tcp_skb_cb) > sizeof(skb->cb));
 
@@ -2930,11 +2931,11 @@ void __init tcp_init(void)
 	}
 
 	/* Try to be a bit smarter and adjust defaults depending
-	 * on available memory.
-	 */
+	* on available memory.
+	*/
 	for (order = 0; ((1 << order) << PAGE_SHIFT) <
-			(tcp_hashinfo.bhash_size * sizeof(struct inet_bind_hashbucket));
-			order++)
+		(tcp_hashinfo.bhash_size * sizeof(struct inet_bind_hashbucket));
+		order++)
 		;
 	if (order >= 4) {
 		tcp_death_row.sysctl_max_tw_buckets = 180000;

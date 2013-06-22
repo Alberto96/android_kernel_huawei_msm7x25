@@ -17,6 +17,10 @@ DATE_START=$(date +"%s")
 
 make -j3
 
+make -j3 modules
+rm ./modules/*
+find /huawei/kernel/android_kernel_huawei_msm7x25 -name '*.ko' -exec cp -v {} ./modules \;
+
 cd ramdisk
 
 echo ""

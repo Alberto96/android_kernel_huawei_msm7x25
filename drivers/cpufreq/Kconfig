@@ -252,8 +252,6 @@ config CPU_FREQ_GOV_SMARTASS2
 
 	  If in doubt, say N.
 
-<<<<<<< HEAD
-=======
 config CPU_FREQ_GOV_SMARTASSH3
 	tristate "'SmartassH3' cpufreq governor"
 	depends on CPU_FREQ
@@ -308,5 +306,4 @@ config CPU_FREQ_VDD_LEVELS
 	help
 	  CPU Vdd levels sysfs interface
 
->>>>>>> 5104bcb... SmartassH3 CPU Governor
 endif	# CPU_FREQ

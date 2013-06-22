@@ -148,7 +148,7 @@ static unsigned int sub_board_id = 0;
 
 #define MSM_PMEM_MDP_SIZE	0xb21000
 
-#define MSM_PMEM_ADSP_SIZE	0x0800000
+#define MSM_PMEM_ADSP_SIZE	0x97b000
 
 /*now crash dump is used for SMEM log to catch sleep log of ARM9 side*/
 #ifdef CONFIG_HUAWEI_CRASH_DUMP
@@ -159,8 +159,8 @@ static unsigned int sub_board_id = 0;
 #define HUAWEI_SHARE_MEMORY_SIZE (424*1024) //424K
 
 #define MSM_FB_SIZE		0x200000
-#define PMEM_KERNEL_EBI1_SIZE	0x80000
-#define MSM_PMEM_AUDIO_SIZE	0x0100000
+#define PMEM_KERNEL_EBI1_SIZE	0x64000
+#define MSM_PMEM_AUDIO_SIZE	0x121000
 #endif
 
 /* Using upper 1/2MB of Apps Bootloader memory*/

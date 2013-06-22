@@ -1,7 +1,7 @@
 #
 # Automatically generated make config: don't edit
 # Linux kernel version: 2.6.32.60
-# Sat Jun 22 15:42:53 2013
+# Sat Jun 22 16:28:39 2013
 #
 CONFIG_ARM=y
 CONFIG_SYS_SUPPORTS_APM_EMULATION=y
@@ -1186,6 +1186,7 @@ CONFIG_HW_CONSOLE=y
 CONFIG_DEVMEM=y
 CONFIG_DEVKMEM=y
 # CONFIG_SERIAL_NONSTANDARD is not set
+CONFIG_FRANDOM=y
 
 #
 # Serial drivers

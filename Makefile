@@ -324,10 +324,11 @@ CHECK		= sparse
 CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void $(CF)
 MODFLAGS	= -DMODULE
+COMMON_OPTIMIZE = -fgcse -fforce-addr -ffast-math -fsingle-precision-constant -marm -march=armv6 -fgcse -ftree-vectorize -funswitch-loops -funroll-loops -fipa-cp-clone -pipe
 CFLAGS_MODULE   = $(MODFLAGS)
 AFLAGS_MODULE   = $(MODFLAGS)
 LDFLAGS_MODULE  = -T $(srctree)/scripts/module-common.lds
-CFLAGS_KERNEL	=
+CFLAGS_KERNEL	= $(COMMON_OPTIMIZE)
 AFLAGS_KERNEL	=
 CFLAGS_GCOV	= -fprofile-arcs -ftest-coverage
 
@@ -523,8 +524,18 @@ all: vmlinux
 
 ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
 KBUILD_CFLAGS	+= -Os
-else
-KBUILD_CFLAGS	+= -Os
+endif
+
+ifdef CONFIG_CC_OPTIMIZE_DEFAULT
+KBUILD_CFLAGS	+= -O2
+endif
+
+ifdef CONFIG_CC_OPTIMIZE_ALOT
+KBUILD_CFLAGS  += -O3
+endif
+
+ifdef CONFIG_CC_OPTIMIZE_ALL
+KBUILD_CFLAGS  += -Ofast
 endif
 
 KBUILD_CFLAGS	+= -DHUAWEI_KERNEL_VERSION=\"$(HUAWEI_KERNEL_VERSION)\"

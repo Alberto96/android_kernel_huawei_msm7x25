@@ -7,7 +7,7 @@ echo ""
 echo ""
 
 export ARCH=arm
-export CROSS_COMPILE=/huawei/kernel/android_prebuilt_toolchains/arm-eabi-linaro-4.6.2/bin/arm-eabi-
+export CROSS_COMPILE=/huawei/kernel/android_prebuilt_toolchains/arm-unknown-linux-gnueabi-linaro_4.7.4-2013.06/bin/arm-gnueabi-
 
 echo "Building CM9 Kernel, ignore any compiling warnings except errors ;)"
 echo ""

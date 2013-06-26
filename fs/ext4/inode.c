@@ -5129,7 +5129,7 @@ static int ext4_do_update_inode(handle_t *handle,
 	int err = 0, rc, block;
 
 	/* For fields not not tracking in the in-memory inode,
-	 * initialise them to zero for new inodes. */
+	 * initialize them to zero for new inodes. */
 	if (ext4_test_inode_state(inode, EXT4_STATE_NEW))
 		memset(raw_inode, 0, EXT4_SB(inode->i_sb)->s_inode_size);
 

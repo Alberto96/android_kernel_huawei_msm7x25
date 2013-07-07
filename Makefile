@@ -219,10 +219,10 @@ CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
 	  else if [ -x /bin/bash ]; then echo /bin/bash; \
 	  else echo sh; fi ; fi)
 
-HOSTCC       = gcc
-HOSTCXX      = g++
-HOSTCFLAGS   = -Wall -Wmissing-prototypes -Wstrict-prototypes -Os -fomit-frame-pointer
-HOSTCXXFLAGS = -Os
+HOSTCC       = ccache gcc
+HOSTCXX      = ccache g++
+HOSTCFLAGS   = -Wall -Wmissing-prototypes -Wstrict-prototypes -O3 -fomit-frame-pointer
+HOSTCXXFLAGS = -O3
 
 # Decide whether to build built-in, modular, or both.
 # Normally, just do built-in.
@@ -321,16 +321,23 @@ KALLSYMS	= scripts/kallsyms
 PERL		= perl
 CHECK		= sparse
 
+LOW_ARM_FLAGS	= -pipe -march=armv6j -mtune=cortex-a5 -marm \
+		  -funsafe-math-optimizations \
+		  -ftree-vectorize -mvectorize-with-neon-quad -mno-unaligned-access
+
+MODULES	= -fmodulo-sched -fmodulo-sched-allow-regmoves
+
 CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void $(CF)
-MODFLAGS	= -DMODULE
-COMMON_OPTIMIZE = -fgcse -fforce-addr -ffast-math -fsingle-precision-constant -marm -march=armv6 -fgcse -ftree-vectorize -funswitch-loops -funroll-loops -fipa-cp-clone -pipe
+MODFLAGS 	= -DMODULE
 CFLAGS_MODULE   = $(MODFLAGS)
 AFLAGS_MODULE   = $(MODFLAGS)
 LDFLAGS_MODULE  = -T $(srctree)/scripts/module-common.lds
-CFLAGS_KERNEL	= $(COMMON_OPTIMIZE)
+CFLAGS_KERNEL	= 
 AFLAGS_KERNEL	=
 CFLAGS_GCOV	= -fprofile-arcs -ftest-coverage
+
+KERNEL_MODS	= $(LOW_ARM_FLAGS) $(MODULES)
 
 
 # Use LINUXINCLUDE when you must reference the include/ directory.
@@ -342,12 +349,12 @@ LINUXINCLUDE    := -Iinclude \
 
 KBUILD_CPPFLAGS := -D__KERNEL__
 
-KBUILD_CFLAGS   := -mno-unaligned-access -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
+KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -fno-strict-aliasing -fno-common \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security \
 		   -fno-delete-null-pointer-checks \
-		   -Wno-uninitialized -Wno-array-bounds -Wno-sequence-point -Wno-address
+		   $(KERNEL_MODS)
 KBUILD_AFLAGS   := -D__ASSEMBLY__
 
 # Read KERNELRELEASE from include/config/kernel.release (if it exists)
@@ -522,21 +529,8 @@ endif # $(dot-config)
 # Defaults vmlinux but it is usually overridden in the arch makefile
 all: vmlinux
 
-ifdef CONFIG_CC_OPTIMIZE_FOR_SIZE
-KBUILD_CFLAGS	+= -Os
-endif
+KBUILD_CFLAGS += -O3
 
-ifdef CONFIG_CC_OPTIMIZE_DEFAULT
-KBUILD_CFLAGS	+= -O2
-endif
-
-ifdef CONFIG_CC_OPTIMIZE_ALOT
-KBUILD_CFLAGS  += -O3
-endif
-
-ifdef CONFIG_CC_OPTIMIZE_ALL
-KBUILD_CFLAGS  += -Ofast
-endif
 
 KBUILD_CFLAGS	+= -DHUAWEI_KERNEL_VERSION=\"$(HUAWEI_KERNEL_VERSION)\"
 include $(srctree)/arch/$(SRCARCH)/Makefile

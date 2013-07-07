@@ -2,6 +2,8 @@
  *
  * Written by David Howells (dhowells@redhat.com).
  * Derived from arch/i386/kernel/semaphore.c
+ *
+ * Writer lock-stealing by Alex Shi <alex.shi@intel.com>
  */
 #include <linux/rwsem.h>
 #include <linux/sched.h>
@@ -52,39 +54,13 @@ __rwsem_do_wake(struct rw_semaphore *sem, int downgrading)
 	struct rwsem_waiter *waiter;
 	struct task_struct *tsk;
 	struct list_head *next;
-	signed long oldcount, woken, loop;
+	signed long woken, loop, adjustment;
 
 	if (downgrading)
 		goto dont_wake_writers;
 
-	/* if we came through an up_xxxx() call, we only only wake someone up
-	 * if we can transition the active part of the count from 0 -> 1
-	 */
- try_again:
-	oldcount = rwsem_atomic_update(RWSEM_ACTIVE_BIAS, sem)
-						- RWSEM_ACTIVE_BIAS;
-	if (oldcount & RWSEM_ACTIVE_MASK)
-		goto undo;
-
-	waiter = list_entry(sem->wait_list.next, struct rwsem_waiter, list);
-
-	/* try to grant a single write lock if there's a writer at the front
-	 * of the queue - note we leave the 'active part' of the count
-	 * incremented by 1 and the waiting part incremented by 0x00010000
-	 */
-	if (!(waiter->flags & RWSEM_WAITING_FOR_WRITE))
-		goto readers_only;
-
-	/* We must be careful not to touch 'waiter' after we set ->task = NULL.
-	 * It is an allocated on the waiter's stack and may become invalid at
-	 * any time after that point (due to a wakeup from another source).
-	 */
-	list_del(&waiter->list);
-	tsk = waiter->task;
-	smp_mb();
-	waiter->task = NULL;
-	wake_up_process(tsk);
-	put_task_struct(tsk);
+	/* Wake up the writing waiter and let the task grab the sem: */
+	wake_up_process(waiter->task);
 	goto out;
 
 	/* don't want to wake any writers */
@@ -135,12 +111,41 @@ __rwsem_do_wake(struct rw_semaphore *sem, int downgrading)
 
  out:
 	return sem;
+}
 
-	/* undo the change to count, but check for a transition 1->0 */
- undo:
-	if (rwsem_atomic_update(-RWSEM_ACTIVE_BIAS, sem) != 0)
-		goto out;
-	goto try_again;
+/* Try to get write sem, caller holds sem->wait_lock: */
+static int try_get_writer_sem(struct rw_semaphore *sem,
+					struct rwsem_waiter *waiter)
+{
+	struct rwsem_waiter *fwaiter;
+	long oldcount, adjustment;
+
+	/* only steal when first waiter is writing */
+	fwaiter = list_entry(sem->wait_list.next, struct rwsem_waiter, list);
+	if (!(fwaiter->flags & RWSEM_WAITING_FOR_WRITE))
+		return 0;
+
+	adjustment = RWSEM_ACTIVE_WRITE_BIAS;
+	/* Only one waiter in the queue: */
+	if (fwaiter == waiter && waiter->list.next == &sem->wait_list)
+		adjustment -= RWSEM_WAITING_BIAS;
+
+try_again_write:
+	oldcount = rwsem_atomic_update(adjustment, sem) - adjustment;
+	if (!(oldcount & RWSEM_ACTIVE_MASK)) {
+		/* No active lock: */
+		struct task_struct *tsk = waiter->task;
+
+		list_del(&waiter->list);
+		smp_mb();
+		put_task_struct(tsk);
+		tsk->state = TASK_RUNNING;
+		return 1;
+	}
+	/* some one grabbed the sem already */
+	if (rwsem_atomic_update(-adjustment, sem) & RWSEM_ACTIVE_MASK)
+		return 0;
+	goto try_again_write;
 }
 
 /*
@@ -175,6 +180,15 @@ rwsem_down_failed_common(struct rw_semaphore *sem,
 	for (;;) {
 		if (!waiter->task)
 			break;
+
+		raw_spin_lock_irq(&sem->wait_lock);
+		/* Try to get the writer sem, may steal from the head writer: */
+		if (flags == RWSEM_WAITING_FOR_WRITE)
+			if (try_get_writer_sem(sem, &waiter)) {
+				raw_spin_unlock_irq(&sem->wait_lock);
+				return sem;
+			}
+		raw_spin_unlock_irq(&sem->wait_lock);
 		schedule();
 		set_task_state(tsk, TASK_UNINTERRUPTIBLE);
 	}

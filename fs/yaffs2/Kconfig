@@ -93,7 +93,7 @@ config YAFFS_AUTO_YAFFS2
 config YAFFS_DISABLE_TAGS_ECC
 	bool "Disable yaffs from doing ECC on tags by default"
 	depends on YAFFS_FS && YAFFS_YAFFS2
-	default n
+	default y
 	help
 	  This defaults yaffs to using its own ECC calculations on tags instead of
 	  just relying on the MTD.
@@ -123,7 +123,7 @@ config YAFFS_ALWAYS_CHECK_CHUNK_ERASED
 config YAFFS_EMPTY_LOST_AND_FOUND
 	bool "Empty lost and found on boot"
 	depends on YAFFS_FS
-	default n
+	default y
 	help
 	  If this is enabled then the contents of lost and found is
 	  automatically dumped at mount.

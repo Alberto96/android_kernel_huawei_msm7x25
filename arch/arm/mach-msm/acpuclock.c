@@ -284,7 +284,7 @@ static struct clkctl_acpu_speed pll0_196_pll1_960_pll2_1056[] = {
 	{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, {0, 0, 0}, {0, 0, 0} }
 };
 
-/* 7x27 normal with GSM capable modem */
+/* 7x27 normal with GSM capable modem, Huawei MSM7225 Freq. table */
 static struct clkctl_acpu_speed pll0_245_pll1_960_pll2_1200[] = {
 	{ 0, 19200, ACPU_PLL_TCXO, 0, 0, 19200, 0, 0, 30720 },
 #ifdef CONFIG_MSM_CPU_FREQ_UNDERCLOCK

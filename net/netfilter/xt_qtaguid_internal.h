@@ -15,33 +15,31 @@
 #include <linux/spinlock_types.h>
 #include <linux/workqueue.h>
 
+/* Define/comment out these *DEBUG to compile in/out the pr_debug calls. */
 /* Iface handling */
-#define IDEBUG_MASK (1<<0)
+#define IDEBUG
 /* Iptable Matching. Per packet. */
-#define MDEBUG_MASK (1<<1)
+#define MDEBUG
 /* Red-black tree handling. Per packet. */
-#define RDEBUG_MASK (1<<2)
+#define RDEBUG
 /* procfs ctrl/stats handling */
-#define CDEBUG_MASK (1<<3)
+#define CDEBUG
 /* dev and resource tracking */
-#define DDEBUG_MASK (1<<4)
+#define DDEBUG
 
 /* E.g (IDEBUG_MASK | CDEBUG_MASK | DDEBUG_MASK) */
 #define DEFAULT_DEBUG_MASK 0
 
-/*
- * (Un)Define these *DEBUG to compile out/in the pr_debug calls.
- * All undef: text size ~ 0x3030; all def: ~ 0x4404.
- */
-#define IDEBUG
-#define MDEBUG
-#define RDEBUG
-#define CDEBUG
-#define DDEBUG
 
-#define MSK_DEBUG(mask, ...) do {                           \
-		if (unlikely(qtaguid_debug_mask & (mask)))  \
-			pr_debug(__VA_ARGS__);              \
+#define IDEBUG_MASK (1<<0)
+#define MDEBUG_MASK (1<<1)
+#define RDEBUG_MASK (1<<2)
+#define CDEBUG_MASK (1<<3)
+#define DDEBUG_MASK (1<<4)
+
+#define MSK_DEBUG(mask, ...) do {                       \
+		if (unlikely(debug_mask & (mask)))      \
+			pr_debug(__VA_ARGS__);          \
 	} while (0)
 #ifdef IDEBUG
 #define IF_DEBUG(...) MSK_DEBUG(IDEBUG_MASK, __VA_ARGS__)
@@ -69,7 +67,7 @@
 #define DR_DEBUG(...) no_printk(__VA_ARGS__)
 #endif
 
-extern uint qtaguid_debug_mask;
+extern uint debug_mask;
 
 /*---------------------------------------------------------------------------*/
 /*
@@ -288,8 +286,6 @@ struct uid_tag_data {
 	 * For the uid, how many accounting tags have been set.
 	 */
 	int num_active_tags;
-	/* Track the number of proc_qtu_data that reference it */
-	int num_pqd;
 	struct rb_root tag_ref_tree;
 	/* No tag_node_tree_lock; use uid_tag_data_tree_lock */
 };

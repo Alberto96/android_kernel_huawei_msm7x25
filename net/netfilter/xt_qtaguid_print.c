@@ -9,13 +9,9 @@
  */
 
 /*
- * Most of the functions in this file just waste time if DEBUG is not defined.
- * The matching xt_qtaguid_print.h will static inline empty funcs if the needed
- * debug flags ore not defined.
- * Those funcs that fail to allocate memory will panic as there is no need to
- * hobble allong just pretending to do the requested work.
+ * There are run-time debug flags enabled via the debug_mask module param, or
+ * via the DEFAULT_DEBUG_MASK. See xt_qtaguid_internal.h.
  */
-
 #define DEBUG
 
 #include <linux/fs.h>
@@ -29,38 +25,21 @@
 #include "xt_qtaguid_internal.h"
 #include "xt_qtaguid_print.h"
 
-#ifdef DDEBUG
-
-static void _bug_on_err_or_null(void *ptr)
-{
-	if (IS_ERR_OR_NULL(ptr)) {
-		pr_err("qtaguid: kmalloc failed\n");
-		BUG();
-	}
-}
-
 char *pp_tag_t(tag_t *tag)
 {
-	char *res;
-
 	if (!tag)
-		res = kasprintf(GFP_ATOMIC, "tag_t@null{}");
-	else
-		res = kasprintf(GFP_ATOMIC,
-				"tag_t@%p{tag=0x%llx, uid=%u}",
-				tag, *tag, get_uid_from_tag(*tag));
-	_bug_on_err_or_null(res);
-	return res;
+		return kasprintf(GFP_ATOMIC, "tag_t@null{}");
+	return kasprintf(GFP_ATOMIC,
+			 "tag_t@%p{tag=0x%llx, uid=%u}",
+			 tag, *tag, get_uid_from_tag(*tag));
 }
 
 char *pp_data_counters(struct data_counters *dc, bool showValues)
 {
-	char *res;
-
 	if (!dc)
-		res = kasprintf(GFP_ATOMIC, "data_counters@null{}");
-	else if (showValues)
-		res = kasprintf(
+		return kasprintf(GFP_ATOMIC, "data_counters@null{}");
+	if (showValues)
+		return kasprintf(
 			GFP_ATOMIC, "data_counters@%p{"
 			"set0{"
 			"rx{"
@@ -106,9 +85,7 @@ char *pp_data_counters(struct data_counters *dc, bool showValues)
 			dc->bpc[1][IFS_TX][IFS_PROTO_OTHER].bytes,
 			dc->bpc[1][IFS_TX][IFS_PROTO_OTHER].packets);
 	else
-		res = kasprintf(GFP_ATOMIC, "data_counters@%p{...}", dc);
-	_bug_on_err_or_null(res);
-	return res;
+		return kasprintf(GFP_ATOMIC, "data_counters@%p{...}", dc);
 }
 
 char *pp_tag_node(struct tag_node *tn)
@@ -116,16 +93,12 @@ char *pp_tag_node(struct tag_node *tn)
 	char *tag_str;
 	char *res;
 
-	if (!tn) {
-		res = kasprintf(GFP_ATOMIC, "tag_node@null{}");
-		_bug_on_err_or_null(res);
-		return res;
-	}
+	if (!tn)
+		return kasprintf(GFP_ATOMIC, "tag_node@null{}");
 	tag_str = pp_tag_t(&tn->tag);
 	res = kasprintf(GFP_ATOMIC,
 			"tag_node@%p{tag=%s}",
 			tn, tag_str);
-	_bug_on_err_or_null(res);
 	kfree(tag_str);
 	return res;
 }
@@ -135,16 +108,12 @@ char *pp_tag_ref(struct tag_ref *tr)
 	char *tn_str;
 	char *res;
 
-	if (!tr) {
-		res = kasprintf(GFP_ATOMIC, "tag_ref@null{}");
-		_bug_on_err_or_null(res);
-		return res;
-	}
+	if (!tr)
+		return kasprintf(GFP_ATOMIC, "tag_ref@null{}");
 	tn_str = pp_tag_node(&tr->tn);
 	res = kasprintf(GFP_ATOMIC,
 			"tag_ref@%p{%s, num_sock_tags=%d}",
 			tr, tn_str, tr->num_sock_tags);
-	_bug_on_err_or_null(res);
 	kfree(tn_str);
 	return res;
 }
@@ -156,18 +125,14 @@ char *pp_tag_stat(struct tag_stat *ts)
 	char *parent_counters_str;
 	char *res;
 
-	if (!ts) {
-		res = kasprintf(GFP_ATOMIC, "tag_stat@null{}");
-		_bug_on_err_or_null(res);
-		return res;
-	}
+	if (!ts)
+		return kasprintf(GFP_ATOMIC, "tag_stat@null{}");
 	tn_str = pp_tag_node(&ts->tn);
 	counters_str = pp_data_counters(&ts->counters, true);
 	parent_counters_str = pp_data_counters(ts->parent_counters, false);
 	res = kasprintf(GFP_ATOMIC,
 			"tag_stat@%p{%s, counters=%s, parent_counters=%s}",
 			ts, tn_str, counters_str, parent_counters_str);
-	_bug_on_err_or_null(res);
 	kfree(tn_str);
 	kfree(counters_str);
 	kfree(parent_counters_str);
@@ -176,42 +141,38 @@ char *pp_tag_stat(struct tag_stat *ts)
 
 char *pp_iface_stat(struct iface_stat *is)
 {
-	char *res;
 	if (!is)
-		res = kasprintf(GFP_ATOMIC, "iface_stat@null{}");
-	else
-		res = kasprintf(GFP_ATOMIC, "iface_stat@%p{"
-				"list=list_head{...}, "
-				"ifname=%s, "
-				"total={rx={bytes=%llu, "
-				"packets=%llu}, "
-				"tx={bytes=%llu, "
-				"packets=%llu}}, "
-				"last_known_valid=%d, "
-				"last_known={rx={bytes=%llu, "
-				"packets=%llu}, "
-				"tx={bytes=%llu, "
-				"packets=%llu}}, "
-				"active=%d, "
-				"net_dev=%p, "
-				"proc_ptr=%p, "
-				"tag_stat_tree=rb_root{...}}",
-				is,
-				is->ifname,
-				is->totals[IFS_RX].bytes,
-				is->totals[IFS_RX].packets,
-				is->totals[IFS_TX].bytes,
-				is->totals[IFS_TX].packets,
-				is->last_known_valid,
-				is->last_known[IFS_RX].bytes,
-				is->last_known[IFS_RX].packets,
-				is->last_known[IFS_TX].bytes,
-				is->last_known[IFS_TX].packets,
-				is->active,
-				is->net_dev,
-				is->proc_ptr);
-	_bug_on_err_or_null(res);
-	return res;
+		return kasprintf(GFP_ATOMIC, "iface_stat@null{}");
+	return kasprintf(GFP_ATOMIC, "iface_stat@%p{"
+			 "list=list_head{...}, "
+			 "ifname=%s, "
+			 "total={rx={bytes=%llu, "
+			 "packets=%llu}, "
+			 "tx={bytes=%llu, "
+			 "packets=%llu}}, "
+			 "last_known_valid=%d, "
+			 "last_known={rx={bytes=%llu, "
+			 "packets=%llu}, "
+			 "tx={bytes=%llu, "
+			 "packets=%llu}}, "
+			 "active=%d, "
+			 "net_dev=%p, "
+			 "proc_ptr=%p, "
+			 "tag_stat_tree=rb_root{...}}",
+			 is,
+			 is->ifname,
+			 is->totals[IFS_RX].bytes,
+			 is->totals[IFS_RX].packets,
+			 is->totals[IFS_TX].bytes,
+			 is->totals[IFS_TX].packets,
+			 is->last_known_valid,
+			 is->last_known[IFS_RX].bytes,
+			 is->last_known[IFS_RX].packets,
+			 is->last_known[IFS_TX].bytes,
+			 is->last_known[IFS_TX].packets,
+			 is->active,
+			 is->net_dev,
+			 is->proc_ptr);
 }
 
 char *pp_sock_tag(struct sock_tag *st)
@@ -219,11 +180,8 @@ char *pp_sock_tag(struct sock_tag *st)
 	char *tag_str;
 	char *res;
 
-	if (!st) {
-		res = kasprintf(GFP_ATOMIC, "sock_tag@null{}");
-		_bug_on_err_or_null(res);
-		return res;
-	}
+	if (!st)
+		return kasprintf(GFP_ATOMIC, "sock_tag@null{}");
 	tag_str = pp_tag_t(&st->tag);
 	res = kasprintf(GFP_ATOMIC, "sock_tag@%p{"
 			"sock_node=rb_node{...}, "
@@ -232,7 +190,6 @@ char *pp_sock_tag(struct sock_tag *st)
 			st, st->sk, st->socket, atomic_long_read(
 				&st->socket->file->f_count),
 			st->pid, tag_str);
-	_bug_on_err_or_null(res);
 	kfree(tag_str);
 	return res;
 }
@@ -242,16 +199,13 @@ char *pp_uid_tag_data(struct uid_tag_data *utd)
 	char *res;
 
 	if (!utd)
-		res = kasprintf(GFP_ATOMIC, "uid_tag_data@null{}");
-	else
-		res = kasprintf(GFP_ATOMIC, "uid_tag_data@%p{"
-				"uid=%u, num_active_acct_tags=%d, "
-				"num_pqd=%d, "
-				"tag_node_tree=rb_root{...}, "
-				"proc_qtu_data_tree=rb_root{...}}",
-				utd, utd->uid,
-				utd->num_active_tags, utd->num_pqd);
-	_bug_on_err_or_null(res);
+		return kasprintf(GFP_ATOMIC, "uid_tag_data@null{}");
+	res = kasprintf(GFP_ATOMIC, "uid_tag_data@%p{"
+			"uid=%u, num_active_acct_tags=%d, "
+			"tag_node_tree=rb_root{...}, "
+			"proc_qtu_data_tree=rb_root{...}}",
+			utd, utd->uid,
+			utd->num_active_tags);
 	return res;
 }
 
@@ -260,11 +214,8 @@ char *pp_proc_qtu_data(struct proc_qtu_data *pqd)
 	char *parent_tag_data_str;
 	char *res;
 
-	if (!pqd) {
-		res = kasprintf(GFP_ATOMIC, "proc_qtu_data@null{}");
-		_bug_on_err_or_null(res);
-		return res;
-	}
+	if (!pqd)
+		return kasprintf(GFP_ATOMIC, "proc_qtu_data@null{}");
 	parent_tag_data_str = pp_uid_tag_data(pqd->parent_tag_data);
 	res = kasprintf(GFP_ATOMIC, "proc_qtu_data@%p{"
 			"node=rb_node{...}, pid=%u, "
@@ -272,7 +223,6 @@ char *pp_proc_qtu_data(struct proc_qtu_data *pqd)
 			"sock_tag_list=list_head{...}}",
 			pqd, pqd->pid, parent_tag_data_str
 		);
-	_bug_on_err_or_null(res);
 	kfree(parent_tag_data_str);
 	return res;
 }
@@ -285,29 +235,20 @@ void prdebug_sock_tag_tree(int indent_level,
 	struct sock_tag *sock_tag_entry;
 	char *str;
 
-	if (!unlikely(qtaguid_debug_mask & DDEBUG_MASK))
-		return;
-
-	if (RB_EMPTY_ROOT(sock_tag_tree)) {
-		str = "sock_tag_tree=rb_root{}";
-		pr_debug("%*d: %s\n", indent_level*2, indent_level, str);
-		return;
-	}
-
 	str = "sock_tag_tree=rb_root{";
-	pr_debug("%*d: %s\n", indent_level*2, indent_level, str);
+	CT_DEBUG("%*d: %s\n", indent_level*2, indent_level, str);
 	indent_level++;
 	for (node = rb_first(sock_tag_tree);
 	     node;
 	     node = rb_next(node)) {
 		sock_tag_entry = rb_entry(node, struct sock_tag, sock_node);
 		str = pp_sock_tag(sock_tag_entry);
-		pr_debug("%*d: %s,\n", indent_level*2, indent_level, str);
+		CT_DEBUG("%*d: %s,\n", indent_level*2, indent_level, str);
 		kfree(str);
 	}
 	indent_level--;
 	str = "}";
-	pr_debug("%*d: %s\n", indent_level*2, indent_level, str);
+	CT_DEBUG("%*d: %s\n", indent_level*2, indent_level, str);
 }
 
 void prdebug_sock_tag_list(int indent_level,
@@ -316,26 +257,17 @@ void prdebug_sock_tag_list(int indent_level,
 	struct sock_tag *sock_tag_entry;
 	char *str;
 
-	if (!unlikely(qtaguid_debug_mask & DDEBUG_MASK))
-		return;
-
-	if (list_empty(sock_tag_list)) {
-		str = "sock_tag_list=list_head{}";
-		pr_debug("%*d: %s\n", indent_level*2, indent_level, str);
-		return;
-	}
-
 	str = "sock_tag_list=list_head{";
-	pr_debug("%*d: %s\n", indent_level*2, indent_level, str);
+	CT_DEBUG("%*d: %s\n", indent_level*2, indent_level, str);
 	indent_level++;
 	list_for_each_entry(sock_tag_entry, sock_tag_list, list) {
 		str = pp_sock_tag(sock_tag_entry);
-		pr_debug("%*d: %s,\n", indent_level*2, indent_level, str);
+		CT_DEBUG("%*d: %s,\n", indent_level*2, indent_level, str);
 		kfree(str);
 	}
 	indent_level--;
 	str = "}";
-	pr_debug("%*d: %s\n", indent_level*2, indent_level, str);
+	CT_DEBUG("%*d: %s\n", indent_level*2, indent_level, str);
 }
 
 void prdebug_proc_qtu_data_tree(int indent_level,
@@ -345,17 +277,8 @@ void prdebug_proc_qtu_data_tree(int indent_level,
 	struct rb_node *node;
 	struct proc_qtu_data *proc_qtu_data_entry;
 
-	if (!unlikely(qtaguid_debug_mask & DDEBUG_MASK))
-		return;
-
-	if (RB_EMPTY_ROOT(proc_qtu_data_tree)) {
-		str = "proc_qtu_data_tree=rb_root{}";
-		pr_debug("%*d: %s\n", indent_level*2, indent_level, str);
-		return;
-	}
-
 	str = "proc_qtu_data_tree=rb_root{";
-	pr_debug("%*d: %s\n", indent_level*2, indent_level, str);
+	CT_DEBUG("%*d: %s\n", indent_level*2, indent_level, str);
 	indent_level++;
 	for (node = rb_first(proc_qtu_data_tree);
 	     node;
@@ -364,7 +287,7 @@ void prdebug_proc_qtu_data_tree(int indent_level,
 					       struct proc_qtu_data,
 					       node);
 		str = pp_proc_qtu_data(proc_qtu_data_entry);
-		pr_debug("%*d: %s,\n", indent_level*2, indent_level,
+		CT_DEBUG("%*d: %s,\n", indent_level*2, indent_level,
 			 str);
 		kfree(str);
 		indent_level++;
@@ -375,7 +298,7 @@ void prdebug_proc_qtu_data_tree(int indent_level,
 	}
 	indent_level--;
 	str = "}";
-	pr_debug("%*d: %s\n", indent_level*2, indent_level, str);
+	CT_DEBUG("%*d: %s\n", indent_level*2, indent_level, str);
 }
 
 void prdebug_tag_ref_tree(int indent_level, struct rb_root *tag_ref_tree)
@@ -384,17 +307,8 @@ void prdebug_tag_ref_tree(int indent_level, struct rb_root *tag_ref_tree)
 	struct rb_node *node;
 	struct tag_ref *tag_ref_entry;
 
-	if (!unlikely(qtaguid_debug_mask & DDEBUG_MASK))
-		return;
-
-	if (RB_EMPTY_ROOT(tag_ref_tree)) {
-		str = "tag_ref_tree{}";
-		pr_debug("%*d: %s\n", indent_level*2, indent_level, str);
-		return;
-	}
-
 	str = "tag_ref_tree{";
-	pr_debug("%*d: %s\n", indent_level*2, indent_level, str);
+	CT_DEBUG("%*d: %s\n", indent_level*2, indent_level, str);
 	indent_level++;
 	for (node = rb_first(tag_ref_tree);
 	     node;
@@ -403,13 +317,13 @@ void prdebug_tag_ref_tree(int indent_level, struct rb_root *tag_ref_tree)
 					 struct tag_ref,
 					 tn.node);
 		str = pp_tag_ref(tag_ref_entry);
-		pr_debug("%*d: %s,\n", indent_level*2, indent_level,
+		CT_DEBUG("%*d: %s,\n", indent_level*2, indent_level,
 			 str);
 		kfree(str);
 	}
 	indent_level--;
 	str = "}";
-	pr_debug("%*d: %s\n", indent_level*2, indent_level, str);
+	CT_DEBUG("%*d: %s\n", indent_level*2, indent_level, str);
 }
 
 void prdebug_uid_tag_data_tree(int indent_level,
@@ -419,17 +333,8 @@ void prdebug_uid_tag_data_tree(int indent_level,
 	struct rb_node *node;
 	struct uid_tag_data *uid_tag_data_entry;
 
-	if (!unlikely(qtaguid_debug_mask & DDEBUG_MASK))
-		return;
-
-	if (RB_EMPTY_ROOT(uid_tag_data_tree)) {
-		str = "uid_tag_data_tree=rb_root{}";
-		pr_debug("%*d: %s\n", indent_level*2, indent_level, str);
-		return;
-	}
-
 	str = "uid_tag_data_tree=rb_root{";
-	pr_debug("%*d: %s\n", indent_level*2, indent_level, str);
+	CT_DEBUG("%*d: %s\n", indent_level*2, indent_level, str);
 	indent_level++;
 	for (node = rb_first(uid_tag_data_tree);
 	     node;
@@ -437,7 +342,7 @@ void prdebug_uid_tag_data_tree(int indent_level,
 		uid_tag_data_entry = rb_entry(node, struct uid_tag_data,
 					      node);
 		str = pp_uid_tag_data(uid_tag_data_entry);
-		pr_debug("%*d: %s,\n", indent_level*2, indent_level, str);
+		CT_DEBUG("%*d: %s,\n", indent_level*2, indent_level, str);
 		kfree(str);
 		if (!RB_EMPTY_ROOT(&uid_tag_data_entry->tag_ref_tree)) {
 			indent_level++;
@@ -448,7 +353,7 @@ void prdebug_uid_tag_data_tree(int indent_level,
 	}
 	indent_level--;
 	str = "}";
-	pr_debug("%*d: %s\n", indent_level*2, indent_level, str);
+	CT_DEBUG("%*d: %s\n", indent_level*2, indent_level, str);
 }
 
 void prdebug_tag_stat_tree(int indent_level,
@@ -458,30 +363,21 @@ void prdebug_tag_stat_tree(int indent_level,
 	struct rb_node *node;
 	struct tag_stat *ts_entry;
 
-	if (!unlikely(qtaguid_debug_mask & DDEBUG_MASK))
-		return;
-
-	if (RB_EMPTY_ROOT(tag_stat_tree)) {
-		str = "tag_stat_tree{}";
-		pr_debug("%*d: %s\n", indent_level*2, indent_level, str);
-		return;
-	}
-
 	str = "tag_stat_tree{";
-	pr_debug("%*d: %s\n", indent_level*2, indent_level, str);
+	CT_DEBUG("%*d: %s\n", indent_level*2, indent_level, str);
 	indent_level++;
 	for (node = rb_first(tag_stat_tree);
 	     node;
 	     node = rb_next(node)) {
 		ts_entry = rb_entry(node, struct tag_stat, tn.node);
 		str = pp_tag_stat(ts_entry);
-		pr_debug("%*d: %s\n", indent_level*2, indent_level,
+		CT_DEBUG("%*d: %s\n", indent_level*2, indent_level,
 			 str);
 		kfree(str);
 	}
 	indent_level--;
 	str = "}";
-	pr_debug("%*d: %s\n", indent_level*2, indent_level, str);
+	CT_DEBUG("%*d: %s\n", indent_level*2, indent_level, str);
 }
 
 void prdebug_iface_stat_list(int indent_level,
@@ -490,21 +386,12 @@ void prdebug_iface_stat_list(int indent_level,
 	char *str;
 	struct iface_stat *iface_entry;
 
-	if (!unlikely(qtaguid_debug_mask & DDEBUG_MASK))
-		return;
-
-	if (list_empty(iface_stat_list)) {
-		str = "iface_stat_list=list_head{}";
-		pr_debug("%*d: %s\n", indent_level*2, indent_level, str);
-		return;
-	}
-
 	str = "iface_stat_list=list_head{";
-	pr_debug("%*d: %s\n", indent_level*2, indent_level, str);
+	CT_DEBUG("%*d: %s\n", indent_level*2, indent_level, str);
 	indent_level++;
 	list_for_each_entry(iface_entry, iface_stat_list, list) {
 		str = pp_iface_stat(iface_entry);
-		pr_debug("%*d: %s\n", indent_level*2, indent_level, str);
+		CT_DEBUG("%*d: %s\n", indent_level*2, indent_level, str);
 		kfree(str);
 
 		spin_lock_bh(&iface_entry->tag_stat_list_lock);
@@ -518,10 +405,9 @@ void prdebug_iface_stat_list(int indent_level,
 	}
 	indent_level--;
 	str = "}";
-	pr_debug("%*d: %s\n", indent_level*2, indent_level, str);
+	CT_DEBUG("%*d: %s\n", indent_level*2, indent_level, str);
 }
 
-#endif  /* ifdef DDEBUG */
 /*------------------------------------------*/
 static const char * const netdev_event_strings[] = {
 	"netdev_unknown",

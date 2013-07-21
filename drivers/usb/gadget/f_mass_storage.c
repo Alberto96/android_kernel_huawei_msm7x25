@@ -1832,9 +1832,6 @@ static int do_mode_sense(struct fsg_dev *fsg, struct fsg_buffhd *bh)
 
 	/* No block descriptors */
 
-	/* Disabled to workaround USB reset problems with a Vista host.
-	 */
-#if 0
 	/* The mode pages, in numerical order.  The only page we support
 	 * is the Caching page. */
 	if (page_code == 0x08 || all_pages) {
@@ -1855,9 +1852,6 @@ static int do_mode_sense(struct fsg_dev *fsg, struct fsg_buffhd *bh)
 		}
 		buf += 12;
 	}
-#else
-	valid_page = 1;
-#endif
 
 	/* Check that a valid page was requested and the mode data length
 	 * isn't too long. */

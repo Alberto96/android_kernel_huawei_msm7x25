@@ -2113,16 +2113,14 @@ static int ctrl_cmd_tag(const char *input)
 		 * At first, we want to catch user-space code that is not
 		 * opening the /dev/xt_qtaguid.
 		 */
-		if (IS_ERR_OR_NULL(pqd_entry))
-			pr_warn_once(
-				"qtaguid: %s(): "
-				"User space forgot to open /dev/xt_qtaguid? "
-				"pid=%u tgid=%u uid=%u\n", __func__,
-				current->pid, current->tgid,
-				current_fsuid());
-		else
+		WARN_ONCE(IS_ERR_OR_NULL(pqd_entry),
+			  "qtaguid: User space forgot to open /dev/xt_qtaguid? "
+			  "pid=%u tgid=%u uid=%u\n",
+			  current->pid, current->tgid, current_fsuid());
+		if (!IS_ERR_OR_NULL(pqd_entry)) {
 			list_add(&sock_tag_entry->list,
 				 &pqd_entry->sock_tag_list);
+		}
 		spin_unlock_bh(&uid_tag_data_tree_lock);
 
 		sock_tag_tree_insert(sock_tag_entry, &sock_tag_tree);
@@ -2202,12 +2200,11 @@ static int ctrl_cmd_untag(const char *input)
 	 * At first, we want to catch user-space code that is not
 	 * opening the /dev/xt_qtaguid.
 	 */
-	if (IS_ERR_OR_NULL(pqd_entry))
-		pr_warn_once("qtaguid: %s(): "
-			     "User space forgot to open /dev/xt_qtaguid? "
-			     "pid=%u tgid=%u uid=%u\n", __func__,
-			     current->pid, current->tgid, current_fsuid());
-	else
+	WARN_ONCE(IS_ERR_OR_NULL(pqd_entry),
+		  "qtaguid: User space forgot to open /dev/xt_qtaguid? "
+		  "pid=%u tgid=%u uid=%u\n",
+		  current->pid, current->tgid, current_fsuid());
+	if (!IS_ERR_OR_NULL(pqd_entry))
 		list_del(&sock_tag_entry->list);
 	spin_unlock_bh(&uid_tag_data_tree_lock);
 	/*

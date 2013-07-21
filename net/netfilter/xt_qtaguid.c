@@ -1788,7 +1788,6 @@ struct proc_print_info {
 	struct iface_stat *iface_entry;
 	struct tag_stat *ts_entry;
 	int item_index;
-	int items_to_skip;
 	int char_count;
 };
 
@@ -1796,10 +1795,7 @@ static int pp_stats_line(struct proc_print_info *ppi, int cnt_set)
 {
 	int len;
 	struct data_counters *cnts;
-
 	if (!ppi->item_index) {
-		if (ppi->item_index++ < ppi->items_to_skip)
-			return 0;
 		len = snprintf(ppi->outp, ppi->char_count,
 			       "idx iface acct_tag_hex uid_tag_int cnt_set "
 			       "rx_bytes rx_packets "
@@ -1813,7 +1809,6 @@ static int pp_stats_line(struct proc_print_info *ppi, int cnt_set)
 	} else {
 		tag_t tag = ppi->ts_entry->tn.tag;
 		uid_t stat_uid = get_uid_from_tag(tag);
-
 		if (!can_read_other_uid_stats(stat_uid)) {
 			CT_DEBUG("qtaguid: stats line: "
 				 "%s 0x%llx %u: "
@@ -1823,8 +1818,6 @@ static int pp_stats_line(struct proc_print_info *ppi, int cnt_set)
 				 current->pid, current_fsuid());
 			return 0;
 		}
-		if (ppi->item_index++ < ppi->items_to_skip)
-			return 0;
 		cnts = &ppi->ts_entry->counters;
 		len = snprintf(
 			ppi->outp, ppi->char_count,
@@ -1898,13 +1891,11 @@ static int qtaguid_stats_proc_read(char *page, char **num_items_returned,
 	ppi.item_index = 0;
 	ppi.char_count = char_count;
 	ppi.num_items_returned = num_items_returned;
-	ppi.items_to_skip = items_to_skip;
 
 	if (unlikely(module_passive)) {
 		len = pp_stats_line(&ppi, 0);
 		/* The header should always be shorter than the buffer. */
 		WARN_ON(len >= ppi.char_count);
-		(*num_items_returned)++;
 		*eof = 1;
 		return len;
 	}
@@ -1916,17 +1907,16 @@ static int qtaguid_stats_proc_read(char *page, char **num_items_returned,
 	if (*eof)
 		return 0;
 
-	/* The idx is there to help debug when things go belly up. */
-	len = pp_stats_line(&ppi, 0);
-	/* Don't advance the outp unless the whole line was printed */
-	if (len >= ppi.char_count) {
-		*ppi.outp = '\0';
-		return ppi.outp - page;
-	}
-	if (len) {
+	if (!items_to_skip) {
+		/* The idx is there to help debug when things go belly up. */
+		len = pp_stats_line(&ppi, 0);
+		/* Don't advance the outp unless the whole line was printed */
+		if (len >= ppi.char_count) {
+			*ppi.outp = '\0';
+			return ppi.outp - page;
+		}
 		ppi.outp += len;
 		ppi.char_count -= len;
-		(*num_items_returned)++;
 	}
 
 	spin_lock_bh(&iface_stat_list_lock);
@@ -1937,6 +1927,8 @@ static int qtaguid_stats_proc_read(char *page, char **num_items_returned,
 		     node;
 		     node = rb_next(node)) {
 			ppi.ts_entry = rb_entry(node, struct tag_stat, tn.node);
+			if (ppi.item_index++ < items_to_skip)
+				continue;
 			if (!pp_sets(&ppi)) {
 				spin_unlock_bh(
 					&ppi.iface_entry->tag_stat_list_lock);

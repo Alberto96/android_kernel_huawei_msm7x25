@@ -265,6 +265,10 @@
 #include <linux/err.h>
 #include <linux/crypto.h>
 
+#ifdef CONFIG_UID_STAT
+#include <linux/uid_stat.h>
+#endif
+
 #include <net/icmp.h>
 #include <net/tcp.h>
 #include <net/xfrm.h>
@@ -386,8 +390,6 @@ unsigned int tcp_poll(struct file *file, struct socket *sock, poll_table *wait)
 	 */
 
 	mask = 0;
-	if (sk->sk_err)
-		mask = POLLERR;
 
 	/*
 	 * POLLHUP is certainly not done right. But poll() doesn't
@@ -451,11 +453,17 @@ unsigned int tcp_poll(struct file *file, struct socket *sock, poll_table *wait)
 				if (sk_stream_wspace(sk) >= sk_stream_min_wspace(sk))
 					mask |= POLLOUT | POLLWRNORM;
 			}
-		}
+		} else
+			mask |= POLLOUT | POLLWRNORM;
 
 		if (tp->urg_data & TCP_URG_VALID)
 			mask |= POLLPRI;
 	}
+	/* This barrier is coupled with smp_wmb() in tcp_reset() */
+	smp_rmb();
+	if (sk->sk_err)
+		mask |= POLLERR;
+
 	return mask;
 }
 
@@ -1097,6 +1105,11 @@ out:
 		tcp_push(sk, flags, mss_now, tp->nonagle);
 	TCP_CHECK_TIMER(sk);
 	release_sock(sk);
+
+#ifdef CONFIG_UID_STAT
+        if (copied > 0)
+                update_tcp_snd(current_uid(), copied);
+#endif
 	return copied;
 
 do_fault:
@@ -1333,14 +1346,19 @@ int tcp_read_sock(struct sock *sk, read_descriptor_t *desc,
 		sk_eat_skb(sk, skb, 0);
 		if (!desc->count)
 			break;
+		tp->copied_seq = seq;
 	}
 	tp->copied_seq = seq;
 
 	tcp_rcv_space_adjust(sk);
 
 	/* Clean up data we have read: This will do ACK frames. */
-	if (copied > 0)
+	if (copied > 0) {
 		tcp_cleanup_rbuf(sk, copied);
+#ifdef CONFIG_UID_STAT
+		update_tcp_rcv(current_uid(), copied);
+#endif
+	}
 	return copied;
 }
 
@@ -1736,6 +1754,10 @@ skip_copy:
 
 	TCP_CHECK_TIMER(sk);
 	release_sock(sk);
+#ifdef CONFIG_UID_STAT
+	if (copied > 0)
+		update_tcp_rcv(current_uid(), copied);
+#endif
 	return copied;
 
 out:
@@ -1745,6 +1767,10 @@ out:
 
 recv_urg:
 	err = tcp_recv_urg(sk, msg, len, flags);
+#ifdef CONFIG_UID_STAT
+	if (err > 0)
+		update_tcp_rcv(current_uid(), err);
+#endif
 	goto out;
 }
 
@@ -1974,11 +2000,8 @@ adjudge_to_death:
 		}
 	}
 	if (sk->sk_state != TCP_CLOSE) {
-		int orphan_count = percpu_counter_read_positive(
-						sk->sk_prot->orphan_count);
-
 		sk_mem_reclaim(sk);
-		if (tcp_too_many_orphans(sk, orphan_count)) {
+		if (tcp_too_many_orphans(sk, 0)) {
 			if (net_ratelimit())
 				printk(KERN_INFO "TCP: too many of orphaned "
 				       "sockets\n");
@@ -2879,7 +2902,7 @@ void __init tcp_init(void)
 {
 	struct sk_buff *skb = NULL;
 	unsigned long nr_pages, limit;
-	int order, i, max_share;
+	int i, max_share, cnt;
 	unsigned long jiffy = jiffies;
 
 	BUILD_BUG_ON(sizeof(struct tcp_skb_cb) > sizeof(skb->cb));
@@ -2929,22 +2952,11 @@ void __init tcp_init(void)
 		INIT_HLIST_HEAD(&tcp_hashinfo.bhash[i].chain);
 	}
 
-	/* Try to be a bit smarter and adjust defaults depending
-	* on available memory.
-	*/
-	for (order = 0; ((1 << order) << PAGE_SHIFT) <
-		(tcp_hashinfo.bhash_size * sizeof(struct inet_bind_hashbucket));
-		order++)
-		;
-	if (order >= 4) {
-		tcp_death_row.sysctl_max_tw_buckets = 180000;
-		sysctl_tcp_max_orphans = 4096 << (order - 4);
-		sysctl_max_syn_backlog = 1024;
-	} else if (order < 3) {
-		tcp_death_row.sysctl_max_tw_buckets >>= (3 - order);
-		sysctl_tcp_max_orphans >>= (3 - order);
-		sysctl_max_syn_backlog = 128;
-	}
+	cnt = tcp_hashinfo.ehash_size;
+
+	tcp_death_row.sysctl_max_tw_buckets = cnt / 2;
+	sysctl_tcp_max_orphans = cnt / 2;
+	sysctl_max_syn_backlog = max(128, cnt / 256);
 
 	/* Set the pressure threshold to be a fraction of global memory that
 	 * is up to 1/2 at 256 MB, decreasing toward zero with the amount of

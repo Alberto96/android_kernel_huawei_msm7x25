@@ -988,7 +988,7 @@ struct sctp_transport {
 	int init_sent_count;
 
 	/* state       : The current state of this destination,
-	 *             : i.e. SCTP_ACTIVE, SCTP_INACTIVE, SCTP_UNKOWN.
+	 *             : i.e. SCTP_ACTIVE, SCTP_INACTIVE, SCTP_UNKNOWN.
 	 */
 	int state;
 
@@ -1007,6 +1007,9 @@ struct sctp_transport {
 
 	/* Heartbeat timer is per destination. */
 	struct timer_list hb_timer;
+
+	/* Timer to handle ICMP proto unreachable envets */
+	struct timer_list proto_unreach_timer;
 
 	/* Since we're using per-destination retransmission timers
 	 * (see above), we're also using per-destination "transmitted"

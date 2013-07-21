@@ -73,14 +73,14 @@ struct cntry_locales_custom {
 };
 
 #define	WL_IW_RSSI_MINVAL	-200
-#define	WL_IW_RSSI_NO_SIGNAL	-99
-#define	WL_IW_RSSI_VERY_LOW	-88
-#define	WL_IW_RSSI_LOW		-78
-#define	WL_IW_RSSI_GOOD		-76
-#define	WL_IW_RSSI_VERY_GOOD	-66
-#define	WL_IW_RSSI_EXCELLENT	-65
+#define	WL_IW_RSSI_NO_SIGNAL	-91
+#define	WL_IW_RSSI_VERY_LOW	-80
+#define	WL_IW_RSSI_LOW		-70
+#define	WL_IW_RSSI_GOOD		-68
+#define	WL_IW_RSSI_VERY_GOOD	-58
+#define	WL_IW_RSSI_EXCELLENT	-57
 #define	WL_IW_RSSI_INVALID	 0
-#define MAX_WX_STRING		88
+#define MAX_WX_STRING		80
 #define isprint(c)		bcm_isprint(c)
 #define WL_IW_SET_ACTIVE_SCAN	(SIOCIWFIRSTPRIV+1)
 #define WL_IW_GET_RSSI		(SIOCIWFIRSTPRIV+3)

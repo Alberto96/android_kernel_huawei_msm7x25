@@ -221,8 +221,8 @@ CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
 
 HOSTCC       = ccache gcc
 HOSTCXX      = ccache g++
-HOSTCFLAGS   = -Wall -Wmissing-prototypes -Wstrict-prototypes -O3 -fomit-frame-pointer
-HOSTCXXFLAGS = -O3
+HOSTCFLAGS   = -Wall -Wmissing-prototypes -Wstrict-prototypes -O2 -fomit-frame-pointer
+HOSTCXXFLAGS = -O2
 
 # Decide whether to build built-in, modular, or both.
 # Normally, just do built-in.
@@ -321,9 +321,11 @@ KALLSYMS	= scripts/kallsyms
 PERL		= perl
 CHECK		= sparse
 
-LOW_ARM_FLAGS	= -pipe -march=armv6j -mtune=cortex-a5 -marm \
+LOW_ARM_FLAGS	= -pipe -march=armv6j -mtune=arm1136j-s -marm \
+		  -fomit-frame-pointer -ffast-math \
 		  -funsafe-math-optimizations \
-		  -ftree-vectorize -mvectorize-with-neon-quad -mno-unaligned-access
+		  -fsingle-precision-constant \
+		  -ftree-vectorize -mno-unaligned-access
 
 MODULES	= -fmodulo-sched -fmodulo-sched-allow-regmoves
 
@@ -333,8 +335,8 @@ MODFLAGS 	= -DMODULE
 CFLAGS_MODULE   = $(MODFLAGS)
 AFLAGS_MODULE   = $(MODFLAGS)
 LDFLAGS_MODULE  = -T $(srctree)/scripts/module-common.lds
-CFLAGS_KERNEL	= 
-AFLAGS_KERNEL	=
+CFLAGS_KERNEL	= -O2 -pipe -mtune=arm1136j-s -marm -fomit-frame-pointer -ffast-math -funsafe-math-optimizations -fsingle-precision-constant -ftree-vectorize -mno-unaligned-access
+AFLAGS_KERNEL	= -O2 -pipe -mtune=arm1136j-s -marm -fomit-frame-pointer -ffast-math -funsafe-math-optimizations -fsingle-precision-constant -ftree-vectorize -mno-unaligned-access
 CFLAGS_GCOV	= -fprofile-arcs -ftest-coverage
 
 KERNEL_MODS	= $(LOW_ARM_FLAGS) $(MODULES)
@@ -529,7 +531,7 @@ endif # $(dot-config)
 # Defaults vmlinux but it is usually overridden in the arch makefile
 all: vmlinux
 
-KBUILD_CFLAGS += -O3
+KBUILD_CFLAGS += -O2
 
 
 KBUILD_CFLAGS	+= -DHUAWEI_KERNEL_VERSION=\"$(HUAWEI_KERNEL_VERSION)\"

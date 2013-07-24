@@ -1,4 +1,4 @@
-obj-y += adsp.o adsp_driver.o adsp_info.o
+obj-y += adsp.o adsp_driver.o adsp_info.o dsp_debug.o adsp_debug.o
 obj-y += adsp_video_verify_cmd.o
 obj-y += adsp_videoenc_verify_cmd.o
 obj-y += adsp_jpeg_verify_cmd.o adsp_jpeg_patch_event.o

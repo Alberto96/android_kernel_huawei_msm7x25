@@ -41,7 +41,7 @@ int put_io_context(struct io_context *ioc)
 		rcu_read_lock();
 		if (ioc->aic && ioc->aic->dtor)
 			ioc->aic->dtor(ioc->aic);
-		cfq_dtor(ioc);
+//		cfq_dtor(ioc);
                 hlist_sched_dtor(ioc, &ioc->cic_list);
 		hlist_sched_dtor(ioc, &ioc->bfq_cic_list);
 		rcu_read_unlock();

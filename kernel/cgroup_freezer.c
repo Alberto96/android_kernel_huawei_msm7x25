@@ -15,6 +15,7 @@
  */
 
 #include <linux/module.h>
+#include <linux/slab.h>
 #include <linux/cgroup.h>
 #include <linux/fs.h>
 #include <linux/uaccess.h>
@@ -45,6 +46,22 @@ static inline struct freezer *task_freezer(struct task_struct *task)
 {
 	return container_of(task_subsys_state(task, freezer_subsys_id),
 			    struct freezer, css);
+}
+
+int cgroup_freezing_or_frozen(struct task_struct *task)
+{
+	struct freezer *freezer;
+	enum freezer_state state;
+
+	task_lock(task);
+	freezer = task_freezer(task);
+	if (!freezer->css.cgroup->parent)
+		state = CGROUP_THAWED; /* root cgroup can't be frozen */
+	else
+		state = freezer->state;
+	task_unlock(task);
+
+	return (state == CGROUP_FREEZING) || (state == CGROUP_FROZEN);
 }
 
 int cgroup_freezing_or_frozen(struct task_struct *task)

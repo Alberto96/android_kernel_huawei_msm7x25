@@ -764,7 +764,7 @@ static void zram_slot_free_notify(struct block_device *bdev,
 }
 
 static const struct block_device_operations zram_devops = {
-	.swap_slot_free_notify = zram_slot_free_notify,
+//	.swap_slot_free_notify = zram_slot_free_notify,
 	.owner = THIS_MODULE
 };
 

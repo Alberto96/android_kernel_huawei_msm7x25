@@ -501,8 +501,6 @@ static int unix_dgram_connect(struct socket *, struct sockaddr *,
 			      int, int);
 static int unix_seqpacket_sendmsg(struct kiocb *, struct socket *,
 				  struct msghdr *, size_t);
-static int unix_seqpacket_recvmsg(struct kiocb *, struct socket *,
-				  struct msghdr *, size_t, int);
 
 static const struct proto_ops unix_stream_ops = {
 	.family =	PF_UNIX,
@@ -562,7 +560,7 @@ static const struct proto_ops unix_seqpacket_ops = {
 	.setsockopt =	sock_no_setsockopt,
 	.getsockopt =	sock_no_getsockopt,
 	.sendmsg =	unix_seqpacket_sendmsg,
-	.recvmsg =	unix_seqpacket_recvmsg,
+	.recvmsg =	unix_dgram_recvmsg,
 	.mmap =		sock_no_mmap,
 	.sendpage =	sock_no_sendpage,
 };
@@ -672,7 +670,6 @@ static int unix_autobind(struct socket *sock)
 	static u32 ordernum = 1;
 	struct unix_address *addr;
 	int err;
-	unsigned int retries = 0;
 
 	mutex_lock(&u->readlock);
 
@@ -698,17 +695,9 @@ retry:
 	if (__unix_find_socket_byname(net, addr->name, addr->len, sock->type,
 				      addr->hash)) {
 		spin_unlock(&unix_table_lock);
-		/*
-		 * __unix_find_socket_byname() may take long time if many names
-		 * are already in use.
-		 */
-		cond_resched();
-		/* Give up if all names seems to be in use. */
-		if (retries++ == 0xFFFFF) {
-			err = -ENOSPC;
-			kfree(addr);
-			goto out;
-		}
+		/* Sanity yield. It is unusual case, but yet... */
+		if (!(ordernum&0xFF))
+			yield();
 		goto retry;
 	}
 	addr->hash ^= sk->sk_type;
@@ -1324,25 +1313,9 @@ static void unix_destruct_fds(struct sk_buff *skb)
 	sock_wfree(skb);
 }
 
-#define MAX_RECURSION_LEVEL 4
-
 static int unix_attach_fds(struct scm_cookie *scm, struct sk_buff *skb)
 {
 	int i;
-	unsigned char max_level = 0;
-	int unix_sock_count = 0;
-
-	for (i = scm->fp->count - 1; i >= 0; i--) {
-		struct sock *sk = unix_get_socket(scm->fp->fp[i]);
-
-		if (sk) {
-			unix_sock_count++;
-			max_level = max(max_level,
-					unix_sk(sk)->recursion_level);
-		}
-	}
-	if (unlikely(max_level > MAX_RECURSION_LEVEL))
-		return -ETOOMANYREFS;
 
 	/*
 	 * Need to duplicate file references for the sake of garbage
@@ -1353,12 +1326,10 @@ static int unix_attach_fds(struct scm_cookie *scm, struct sk_buff *skb)
 	if (!UNIXCB(skb).fp)
 		return -ENOMEM;
 
-	if (unix_sock_count) {
-		for (i = scm->fp->count - 1; i >= 0; i--)
-			unix_inflight(scm->fp->fp[i]);
-	}
+	for (i = scm->fp->count-1; i >= 0; i--)
+		unix_inflight(scm->fp->fp[i]);
 	skb->destructor = unix_destruct_fds;
-	return max_level;
+	return 0;
 }
 
 /*
@@ -1380,7 +1351,6 @@ static int unix_dgram_sendmsg(struct kiocb *kiocb, struct socket *sock,
 	struct sk_buff *skb;
 	long timeo;
 	struct scm_cookie tmp_scm;
-	int max_level = 0;
 
 	if (NULL == siocb->scm)
 		siocb->scm = &tmp_scm;
@@ -1421,9 +1391,8 @@ static int unix_dgram_sendmsg(struct kiocb *kiocb, struct socket *sock,
 	memcpy(UNIXCREDS(skb), &siocb->scm->creds, sizeof(struct ucred));
 	if (siocb->scm->fp) {
 		err = unix_attach_fds(siocb->scm, skb);
-		if (err < 0)
+		if (err)
 			goto out_free;
-		max_level = err + 1;
 	}
 	unix_get_secdata(siocb->scm, skb);
 
@@ -1504,8 +1473,6 @@ restart:
 	}
 
 	skb_queue_tail(&other->sk_receive_queue, skb);
-	if (max_level > unix_sk(other)->recursion_level)
-		unix_sk(other)->recursion_level = max_level;
 	unix_state_unlock(other);
 	other->sk_data_ready(other, len);
 	sock_put(other);
@@ -1536,7 +1503,6 @@ static int unix_stream_sendmsg(struct kiocb *kiocb, struct socket *sock,
 	int sent = 0;
 	struct scm_cookie tmp_scm;
 	bool fds_sent = false;
-	int max_level = 0;
 
 	if (NULL == siocb->scm)
 		siocb->scm = &tmp_scm;
@@ -1601,11 +1567,10 @@ static int unix_stream_sendmsg(struct kiocb *kiocb, struct socket *sock,
 		/* Only send the fds in the first buffer */
 		if (siocb->scm->fp && !fds_sent) {
 			err = unix_attach_fds(siocb->scm, skb);
-			if (err < 0) {
+			if (err) {
 				kfree_skb(skb);
 				goto out_err;
 			}
-			max_level = err + 1;
 			fds_sent = true;
 		}
 
@@ -1622,8 +1587,6 @@ static int unix_stream_sendmsg(struct kiocb *kiocb, struct socket *sock,
 			goto pipe_err_free;
 
 		skb_queue_tail(&other->sk_receive_queue, skb);
-		if (max_level > unix_sk(other)->recursion_level)
-			unix_sk(other)->recursion_level = max_level;
 		unix_state_unlock(other);
 		other->sk_data_ready(other, size);
 		sent += size;
@@ -1664,18 +1627,6 @@ static int unix_seqpacket_sendmsg(struct kiocb *kiocb, struct socket *sock,
 		msg->msg_namelen = 0;
 
 	return unix_dgram_sendmsg(kiocb, sock, msg, len);
-}
-
-static int unix_seqpacket_recvmsg(struct kiocb *iocb, struct socket *sock,
-			      struct msghdr *msg, size_t size,
-			      int flags)
-{
-	struct sock *sk = sock->sk;
-
-	if (sk->sk_state != TCP_ESTABLISHED)
-		return -ENOTCONN;
-
-	return unix_dgram_recvmsg(iocb, sock, msg, size, flags);
 }
 
 static void unix_copy_addr(struct msghdr *msg, struct sock *sk)
@@ -1852,7 +1803,6 @@ static int unix_stream_recvmsg(struct kiocb *iocb, struct socket *sock,
 		unix_state_lock(sk);
 		skb = skb_dequeue(&sk->sk_receive_queue);
 		if (skb == NULL) {
-			unix_sk(sk)->recursion_level = 0;
 			if (copied >= target)
 				goto unlock;
 

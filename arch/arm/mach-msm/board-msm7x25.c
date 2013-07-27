@@ -152,11 +152,11 @@ static unsigned int sub_board_id = 0;
 
 /*now crash dump is used for SMEM log to catch sleep log of ARM9 side*/
 #ifdef CONFIG_HUAWEI_CRASH_DUMP
-#define HUAWEI_CRASH_MEM_SIZE   (50*1024) //600K size
+#define HUAWEI_CRASH_MEM_SIZE   (0*1024) //600K size
 #elif defined(CONFIG_HUAWEI_SMEM_SLEEP_LOG)
-#define HUAWEI_SMEM_SLEEP_LOG_SIZE   (50*1024) //600K size
+#define HUAWEI_SMEM_SLEEP_LOG_SIZE   (0*1024) //600K size
 #endif
-#define HUAWEI_SHARE_MEMORY_SIZE (424*1024) //424K
+#define HUAWEI_SHARE_MEMORY_SIZE (0*1024) //424K
 
 #define MSM_FB_SIZE		0x200000
 #define PMEM_KERNEL_EBI1_SIZE	0x64000
